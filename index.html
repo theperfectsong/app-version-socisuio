@@ -1,0 +1,1751 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>StudySwipe - CPCC Tutor & Study Group Matcher</title>
+
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Canvas Confetti -->
+  <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', 'sans-serif'],
+            display: ['Plus Jakarta Sans', 'sans-serif'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+              dark: '#0f172a',
+            },
+            accent: {
+              cyan: '#06b6d4',
+              emerald: '#10b981',
+              rose: '#f43f5e',
+              amber: '#f59e0b',
+              purple: '#8b5cf6'
+            }
+          },
+          boxShadow: {
+            'glow-indigo': '0 0 25px -5px rgba(79, 70, 229, 0.4)',
+            'glow-cyan': '0 0 25px -5px rgba(6, 182, 212, 0.4)',
+            'card-3d': '0 20px 25px -5px rgba(15, 23, 42, 0.2), 0 8px 10px -6px rgba(15, 23, 42, 0.12)',
+          }
+        }
+      }
+    }
+  </script>
+
+  <style>
+    /* Custom Scrollbar Styling */
+    ::-webkit-scrollbar {
+      width: 5px;
+      height: 5px;
+    }
+    ::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.1);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: rgba(148, 163, 184, 0.3);
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: rgba(99, 102, 241, 0.5);
+    }
+
+    /* Deck and Card 3D Positioning */
+    .deck-container {
+      perspective: 1000px;
+      position: relative;
+    }
+
+    .swipe-card {
+      user-select: none;
+      touch-action: none;
+      transition: transform 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s ease;
+      will-change: transform, opacity;
+    }
+
+    .swipe-card.dragging {
+      transition: none !important;
+    }
+
+    /* Swipe Badge Overlays */
+    .swipe-badge {
+      opacity: 0;
+      transition: opacity 0.15s ease;
+      pointer-events: none;
+    }
+
+    /* Mobile Outer Shell Container */
+    .phone-container {
+      max-width: 440px;
+      height: 880px;
+      border-radius: 44px;
+      border: 10px solid #1e293b;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255,255,255,0.1);
+    }
+
+    .phone-container.full-canvas {
+      max-width: 100% !important;
+      height: 100vh !important;
+      border-radius: 0 !important;
+      border: none !important;
+    }
+
+    /* Keyframe Animations */
+    @keyframes pulseGlow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.8; transform: scale(1.02); }
+    }
+    .animate-pulse-glow {
+      animation: pulseGlow 2s infinite ease-in-out;
+    }
+  </style>
+</head>
+
+<body class="bg-slate-950 text-slate-100 font-sans min-h-screen flex flex-col items-center justify-center p-0 sm:p-4 selection:bg-brand-500 selection:text-white">
+
+  <div class="w-full max-w-lg mb-2 px-4 flex items-center justify-between text-xs text-slate-400">
+    <div class="flex items-center gap-2">
+      <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+      <span class="font-semibold text-slate-200">Central Piedmont Community College Hub</span>
+    </div>
+    <button onclick="toggleViewMode()" class="hover:text-slate-100 transition flex items-center gap-1.5 bg-slate-900 border border-slate-800 px-2.5 py-1 rounded-full text-xs font-medium">
+      <span id="viewModeIcon">🖥️</span>
+      <span id="viewModeText">Expand Canvas</span>
+    </button>
+  </div>
+
+  <div id="appContainer" class="phone-container w-full bg-slate-900 flex flex-col relative overflow-hidden transition-all duration-300">
+    
+    <!-- Phone Top Status Bar -->
+    <div class="w-full bg-slate-900 pt-3 px-6 pb-2 flex justify-between items-center text-xs font-semibold text-slate-400 z-30 shrink-0 select-none">
+      <span id="currentTime">9:41</span>
+      <div class="w-20 h-4 bg-slate-950 rounded-full flex items-center justify-center">
+        <div class="w-2 h-2 rounded-full bg-slate-800"></div>
+      </div>
+      <div class="flex items-center gap-1.5">
+        <i class="fa-solid fa-wifi"></i>
+        <i class="fa-solid fa-battery-full text-emerald-400"></i>
+      </div>
+    </div>
+
+    <!-- App Header -->
+    <header class="bg-slate-900/90 backdrop-blur-md border-b border-slate-800 px-4 py-3 flex items-center justify-between z-20 shrink-0">
+      <div class="flex items-center gap-2.5">
+        <div class="w-9 h-9 rounded-xl bg-gradient-to-tr from-brand-600 via-indigo-500 to-accent-cyan flex items-center justify-center shadow-glow-indigo">
+          <i class="fa-solid fa-layer-group text-white text-base"></i>
+        </div>
+        <div>
+          <h1 class="font-display font-extrabold text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-400 bg-clip-text text-transparent">
+            StudySwipe
+          </h1>
+          <p class="text-[10px] text-brand-400 font-semibold tracking-wider uppercase -mt-1">CPCC Peer & Tutor Hub</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-1.5">
+        <button onclick="showSosModal()" title="Emergency Cram Broadcast" class="flex items-center gap-1 px-2.5 py-1 rounded-full bg-rose-500/10 border border-rose-500/30 text-rose-400 text-xs font-bold hover:bg-rose-500/20 transition animate-pulse">
+          <i class="fa-solid fa-triangle-exclamation"></i>
+          <span>Cram SOS</span>
+        </button>
+        <button onclick="showEduBadgeModal()" class="flex items-center gap-1 px-2 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-medium hover:bg-emerald-500/20 transition">
+          <i class="fa-solid fa-shield-halved text-[10px]"></i>
+        </button>
+        <button onclick="resetDeck()" title="Reset Deck Cards" class="w-8 h-8 rounded-full bg-slate-800 border border-slate-700 flex items-center justify-center text-slate-400 hover:text-white transition active:scale-95">
+          <i class="fa-solid fa-rotate-right text-xs"></i>
+        </button>
+      </div>
+    </header>
+
+    <main id="tab-discover" class="app-tab flex-1 flex flex-col p-3 overflow-hidden relative z-10">
+      
+      <!-- SOS Active Alert Banner (If triggered) -->
+      <div id="sosActiveBanner" class="hidden mb-2 p-2.5 rounded-2xl bg-gradient-to-r from-rose-950 via-slate-900 to-slate-900 border border-rose-500/40 text-xs flex items-center justify-between shrink-0 shadow-lg">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-rose-500 animate-ping"></span>
+          <div>
+            <p class="font-bold text-rose-300 flex items-center gap-1">
+              <span>🚨 Cram SOS Active:</span>
+              <span id="sosBannerCourse" class="text-white">CHEM 210</span>
+            </p>
+            <p id="sosBannerText" class="text-[10px] text-slate-300 truncate max-w-[200px]">Midterm tomorrow at 8 AM! Need mechanism help.</p>
+          </div>
+        </div>
+        <button onclick="clearSosAlert()" class="text-slate-400 hover:text-white px-1.5"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+
+      <!-- Filter Bar -->
+      <div class="space-y-2 mb-2 shrink-0">
+        <!-- Mode Pills -->
+        <div class="grid grid-cols-4 gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs">
+          <button onclick="setModeFilter('all')" id="btn-filter-all" class="filter-mode-btn py-1.5 rounded-lg text-center font-medium transition text-white bg-brand-600 shadow-sm">
+            All
+          </button>
+          <button onclick="setModeFilter('buddy')" id="btn-filter-buddy" class="filter-mode-btn py-1.5 rounded-lg text-center font-medium transition text-slate-400 hover:text-slate-200">
+            Buddies
+          </button>
+          <button onclick="setModeFilter('tutor')" id="btn-filter-tutor" class="filter-mode-btn py-1.5 rounded-lg text-center font-medium transition text-slate-400 hover:text-slate-200">
+            Tutors
+          </button>
+          <button onclick="setModeFilter('group')" id="btn-filter-group" class="filter-mode-btn py-1.5 rounded-lg text-center font-medium transition text-slate-400 hover:text-slate-200">
+            Groups
+          </button>
+        </div>
+
+        <!-- Course & Campus Dropdown Filters -->
+        <div class="grid grid-cols-2 gap-2">
+          <div class="relative">
+            <i class="fa-solid fa-book-open absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xs"></i>
+            <select id="courseFilter" onchange="setCourseFilter(this.value)" class="w-full bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl pl-8 pr-7 py-2 appearance-none focus:outline-none focus:border-brand-500 font-medium truncate">
+              <option value="all">📚 All Courses</option>
+              <option value="CHEM 210">CHEM 210 - Org Chem I</option>
+              <option value="CS 101">CS 101 - Intro Python</option>
+              <option value="MATH 201">MATH 201 - Calculus II</option>
+              <option value="PHYS 150">PHYS 150 - Physics I</option>
+              <option value="ECON 102">ECON 102 - Microecon</option>
+              <option value="BIO 168">BIO 168 - Anatomy I</option>
+              <option value="ACC 120">ACC 120 - Accounting</option>
+              <option value="PSY 150">PSY 150 - Psychology</option>
+            </select>
+            <i class="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-[10px] pointer-events-none"></i>
+          </div>
+
+          <div class="relative">
+            <i class="fa-solid fa-location-dot absolute left-3 top-1/2 -translate-y-1/2 text-emerald-400 text-xs"></i>
+            <select id="campusFilter" onchange="setCampusFilter(this.value)" class="w-full bg-slate-950 border border-slate-800 text-slate-200 text-xs rounded-xl pl-8 pr-7 py-2 appearance-none focus:outline-none focus:border-emerald-500 font-medium truncate">
+              <option value="all">📍 All Campuses</option>
+              <option value="Central Campus">Central Campus (Midtown)</option>
+              <option value="Levine Campus">Levine Campus (Matthews)</option>
+              <option value="Cato Campus">Cato Campus (Univ City)</option>
+              <option value="Harper Campus">Harper Campus (South)</option>
+              <option value="Merancas Campus">Merancas Campus (Huntersville)</option>
+              <option value="Harris Campus">Harris Campus (West)</option>
+              <option value="Virtual / Online">Virtual / Online</option>
+            </select>
+            <i class="fa-solid fa-chevron-down absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-[10px] pointer-events-none"></i>
+          </div>
+        </div>
+      </div>
+
+      <!-- Swipe Deck Stack -->
+      <div id="deckContainer" class="deck-container flex-1 relative w-full h-full flex items-center justify-center">
+        <!-- Dynamic Cards inserted via JS -->
+      </div>
+
+      <!-- Action Button Bar -->
+      <div class="flex items-center justify-around px-4 pt-2 pb-1 shrink-0">
+        <button onclick="rewindCard()" title="Undo Swipe" class="w-11 h-11 rounded-full bg-slate-800 hover:bg-slate-700 text-amber-400 border border-amber-500/30 flex items-center justify-center text-lg shadow-lg active:scale-90 transition">
+          <i class="fa-solid fa-rotate-left"></i>
+        </button>
+
+        <button onclick="triggerSwipe('left')" title="Pass" class="w-14 h-14 rounded-full bg-slate-900 border-2 border-accent-rose/50 hover:border-accent-rose text-accent-rose flex items-center justify-center text-2xl shadow-lg hover:bg-accent-rose/10 active:scale-90 transition">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+
+        <button onclick="triggerSwipe('up')" title="Super Study Request" class="w-12 h-12 rounded-full bg-slate-900 border-2 border-accent-cyan/50 hover:border-accent-cyan text-accent-cyan flex items-center justify-center text-xl shadow-lg hover:bg-accent-cyan/10 active:scale-90 transition">
+          <i class="fa-solid fa-star"></i>
+        </button>
+
+        <button onclick="triggerSwipe('right')" title="Connect / Study Match" class="w-14 h-14 rounded-full bg-gradient-to-tr from-emerald-600 to-teal-400 border-2 border-emerald-300/40 text-white flex items-center justify-center text-2xl shadow-glow-indigo active:scale-90 transition">
+          <i class="fa-solid fa-heart"></i>
+        </button>
+      </div>
+    </main>
+
+    <main id="tab-spots" class="app-tab hidden flex-1 flex flex-col p-3 bg-slate-950 overflow-y-auto">
+      <div class="mb-3 shrink-0">
+        <h2 class="font-display font-bold text-lg text-white flex items-center gap-2">
+          <span>CPCC Study Spots Finder</span>
+          <span class="px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 text-[10px] font-bold">6 Campuses</span>
+        </h2>
+        <p class="text-xs text-slate-400">Discover ideal spots with noise levels, WiFi, and power outlet info.</p>
+      </div>
+
+      <!-- Campus Spot Filter Pills -->
+      <div class="flex gap-1.5 overflow-x-auto pb-2 mb-3 text-xs shrink-0 no-scrollbar">
+        <button onclick="filterSpotsByCampus('all')" id="spot-filter-all" class="px-3 py-1.5 rounded-xl font-medium bg-brand-600 text-white whitespace-nowrap">All Campuses</button>
+        <button onclick="filterSpotsByCampus('Central Campus')" id="spot-filter-central" class="px-3 py-1.5 rounded-xl font-medium bg-slate-900 border border-slate-800 text-slate-300 whitespace-nowrap">Central</button>
+        <button onclick="filterSpotsByCampus('Levine Campus')" id="spot-filter-levine" class="px-3 py-1.5 rounded-xl font-medium bg-slate-900 border border-slate-800 text-slate-300 whitespace-nowrap">Levine</button>
+        <button onclick="filterSpotsByCampus('Cato Campus')" id="spot-filter-cato" class="px-3 py-1.5 rounded-xl font-medium bg-slate-900 border border-slate-800 text-slate-300 whitespace-nowrap">Cato</button>
+        <button onclick="filterSpotsByCampus('Harper Campus')" id="spot-filter-harper" class="px-3 py-1.5 rounded-xl font-medium bg-slate-900 border border-slate-800 text-slate-300 whitespace-nowrap">Harper</button>
+      </div>
+
+      <!-- Study Spots List -->
+      <div id="studySpotsContainer" class="space-y-3">
+        <!-- Rendered dynamically by JS -->
+      </div>
+    </main>
+
+    <main id="tab-matches" class="app-tab hidden flex-1 flex flex-col bg-slate-950 overflow-hidden">
+      <!-- Sub Header -->
+      <div class="p-3 border-b border-slate-800 bg-slate-900 flex items-center justify-between shrink-0">
+        <h2 class="font-display font-bold text-slate-100 flex items-center gap-2">
+          <span>CPCC Academic Matches</span>
+          <span id="matchCountBadge" class="bg-brand-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">2</span>
+        </h2>
+        <div class="flex gap-1 bg-slate-950 p-1 rounded-lg text-[11px] border border-slate-800">
+          <button onclick="filterMatches('all')" id="mfilter-all" class="px-2 py-0.5 rounded font-medium text-white bg-slate-800">All</button>
+          <button onclick="filterMatches('buddy')" id="mfilter-buddy" class="px-2 py-0.5 rounded font-medium text-slate-400">Buddies</button>
+          <button onclick="filterMatches('tutor')" id="mfilter-tutor" class="px-2 py-0.5 rounded font-medium text-slate-400">Tutors</button>
+          <button onclick="filterMatches('group')" id="mfilter-group" class="px-2 py-0.5 rounded font-medium text-slate-400">Groups</button>
+        </div>
+      </div>
+
+      <!-- Chat Container -->
+      <div class="flex-1 flex overflow-hidden relative">
+        <div id="matchesListContainer" class="w-full flex-1 overflow-y-auto divide-y divide-slate-800/60 p-2">
+          <!-- Populated by JS -->
+        </div>
+
+        <!-- Chat Overlay -->
+        <div id="chatViewOverlay" class="absolute inset-0 bg-slate-950 z-20 transform translate-x-full transition-transform duration-300 flex flex-col">
+          <div class="p-3 bg-slate-900 border-b border-slate-800 flex items-center justify-between shrink-0">
+            <div class="flex items-center gap-3">
+              <button onclick="closeChatView()" class="w-8 h-8 rounded-full bg-slate-800 text-slate-300 hover:text-white flex items-center justify-center">
+                <i class="fa-solid fa-arrow-left text-xs"></i>
+              </button>
+              <div class="relative">
+                <img id="chatUserAvatar" src="" class="w-10 h-10 rounded-full object-cover border border-slate-700">
+                <span class="w-3 h-3 rounded-full bg-emerald-500 border-2 border-slate-900 absolute bottom-0 right-0"></span>
+              </div>
+              <div>
+                <h3 id="chatUserName" class="font-bold text-sm text-slate-100">Name</h3>
+                <p id="chatUserSub" class="text-[11px] text-brand-400 font-medium">CHEM 210 • Study Buddy</p>
+              </div>
+            </div>
+
+            <button onclick="showSessionPlanModal()" title="Schedule Study Session" class="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white text-xs font-semibold flex items-center gap-1.5 transition">
+              <i class="fa-solid fa-calendar-plus"></i>
+              <span>Plan Session</span>
+            </button>
+          </div>
+
+          <div id="chatMessagesBox" class="flex-1 p-3 overflow-y-auto space-y-3 bg-slate-950">
+            <!-- Messages injected dynamically -->
+          </div>
+
+          <!-- Icebreaker prompts -->
+          <div id="quickPromptsBar" class="px-3 py-1.5 bg-slate-900/60 border-t border-slate-800 flex gap-2 overflow-x-auto shrink-0 text-xs">
+            <button onclick="sendQuickChat('CPCC Central Campus Library work for you?')" class="whitespace-nowrap px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">
+              📍 Central Campus Library?
+            </button>
+            <button onclick="sendQuickChat('Are you ready for the upcoming midterm test?')" class="whitespace-nowrap px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">
+              📝 Midterm Prep?
+            </button>
+            <button onclick="sendQuickChat('Let\'s set up a 1-hour practice session!')" class="whitespace-nowrap px-2.5 py-1 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700">
+              ⏰ 1-hr Review?
+            </button>
+          </div>
+
+          <!-- Chat Input -->
+          <form onsubmit="handleSendChatMessage(event)" class="p-2.5 bg-slate-900 border-t border-slate-800 flex items-center gap-2 shrink-0">
+            <input type="text" id="chatInput" placeholder="Write message or study proposal..." class="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-xs text-slate-200 focus:outline-none focus:border-brand-500">
+            <button type="submit" class="w-9 h-9 rounded-xl bg-brand-600 hover:bg-brand-500 text-white flex items-center justify-center transition shrink-0">
+              <i class="fa-solid fa-paper-plane text-xs"></i>
+            </button>
+          </form>
+        </div>
+      </div>
+    </main>
+
+    <main id="tab-create" class="app-tab hidden flex-1 flex flex-col p-4 bg-slate-950 overflow-y-auto">
+      <div class="mb-4">
+        <h2 class="font-display font-bold text-xl text-white">Post to CPCC Deck</h2>
+        <p class="text-xs text-slate-400">Host a group session, offer peer tutoring, or find a study partner.</p>
+      </div>
+
+      <form onsubmit="handleCreatePost(event)" class="space-y-4 text-xs">
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1.5">I want to...</label>
+          <div class="grid grid-cols-3 gap-2">
+            <label class="cursor-pointer">
+              <input type="radio" name="postType" value="buddy" checked class="peer hidden" onchange="toggleFormFields()">
+              <div class="p-2.5 rounded-xl border border-slate-800 bg-slate-900 peer-checked:border-brand-500 peer-checked:bg-brand-500/10 text-center transition">
+                <i class="fa-solid fa-user-group text-brand-400 text-base mb-1 block"></i>
+                <span class="font-semibold text-slate-200">Find Buddy</span>
+              </div>
+            </label>
+            <label class="cursor-pointer">
+              <input type="radio" name="postType" value="tutor" class="peer hidden" onchange="toggleFormFields()">
+              <div class="p-2.5 rounded-xl border border-slate-800 bg-slate-900 peer-checked:border-emerald-500 peer-checked:bg-emerald-500/10 text-center transition">
+                <i class="fa-solid fa-graduation-cap text-emerald-400 text-base mb-1 block"></i>
+                <span class="font-semibold text-slate-200">Offer Tutoring</span>
+              </div>
+            </label>
+            <label class="cursor-pointer">
+              <input type="radio" name="postType" value="group" class="peer hidden" onchange="toggleFormFields()">
+              <div class="p-2.5 rounded-xl border border-slate-800 bg-slate-900 peer-checked:border-accent-cyan peer-checked:bg-accent-cyan/10 text-center transition">
+                <i class="fa-solid fa-users text-accent-cyan text-base mb-1 block"></i>
+                <span class="font-semibold text-slate-200">Host Group</span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">CPCC Campus Location</label>
+          <select id="postCampus" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-emerald-500 font-medium">
+            <option value="Central Campus">Central Campus (Midtown Charlotte)</option>
+            <option value="Levine Campus">Levine Campus (Matthews)</option>
+            <option value="Cato Campus">Cato Campus (University City)</option>
+            <option value="Harper Campus">Harper Campus (South Charlotte)</option>
+            <option value="Merancas Campus">Merancas Campus (Huntersville)</option>
+            <option value="Harris Campus">Harris Campus (West Charlotte)</option>
+            <option value="Virtual / Online">Virtual / Online</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Course Code</label>
+          <select id="postCourse" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-brand-500 font-medium">
+            <option value="CHEM 210">CHEM 210 - Organic Chemistry I</option>
+            <option value="CS 101">CS 101 - Intro Python Programming</option>
+            <option value="MATH 201">MATH 201 - Calculus II</option>
+            <option value="PHYS 150">PHYS 150 - University Physics I</option>
+            <option value="ECON 102">ECON 102 - Microeconomics</option>
+            <option value="BIO 168">BIO 168 - Anatomy & Physiology I</option>
+            <option value="ACC 120">ACC 120 - Financial Accounting</option>
+            <option value="PSY 150">PSY 150 - General Psychology</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Specific Need or Goal</label>
+          <input type="text" id="postTitle" placeholder="e.g. Prep for Midterm 2 / Lab Homework" required class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-brand-500">
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Description & Study Style</label>
+          <textarea id="postDescription" rows="3" placeholder="Describe topics you plan to review, target grade, and session dynamic..." required class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-brand-500 resize-none"></textarea>
+        </div>
+
+        <div id="dynamicPostField"></div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Time Availability</label>
+            <input type="text" id="postTime" placeholder="e.g. Mon/Wed 5-7 PM" required class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-brand-500">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Campus Spot</label>
+            <input type="text" id="postLocation" placeholder="e.g. CPCC Library 2nd Fl" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-brand-500">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Study Tags (Comma separated)</label>
+          <input type="text" id="postTags" placeholder="Quiet, Whiteboard, Flashcards, Exam Prep" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200 focus:outline-none focus:border-brand-500">
+        </div>
+
+        <button type="submit" class="w-full py-3 bg-gradient-to-r from-brand-600 to-indigo-600 hover:from-brand-500 hover:to-indigo-500 text-white font-bold rounded-xl shadow-glow-indigo transition text-sm flex items-center justify-center gap-2">
+          <i class="fa-solid fa-paper-plane"></i>
+          <span>Publish Card to CPCC Deck</span>
+        </button>
+      </form>
+    </main>
+
+    <main id="tab-profile" class="app-tab hidden flex-1 flex flex-col p-4 bg-slate-950 overflow-y-auto">
+      <div class="text-center relative pb-4 border-b border-slate-800">
+        <div class="relative w-24 h-24 mx-auto mb-3">
+          <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80" class="w-full h-full rounded-full object-cover border-4 border-brand-500 shadow-glow-indigo">
+          <span class="absolute bottom-1 right-1 bg-emerald-500 text-slate-950 rounded-full p-1 text-[10px] border-2 border-slate-900" title="Verified CPCC Student">
+            <i class="fa-solid fa-check"></i>
+          </span>
+        </div>
+        <h2 class="font-display font-extrabold text-lg text-white flex items-center justify-center gap-1.5">
+          <span>Alex River</span>
+          <i class="fa-solid fa-circle-check text-brand-400 text-sm"></i>
+        </h2>
+        <p class="text-xs text-slate-400 font-medium">Computer Science • CPCC Student</p>
+        <p class="text-[11px] text-emerald-400 mt-1 flex items-center justify-center gap-1">
+          <i class="fa-solid fa-building-columns"></i>
+          <span>Central Piedmont Community College (.edu verified)</span>
+        </p>
+
+        <!-- Peer Karma Badges -->
+        <div class="flex justify-center gap-1.5 mt-2">
+          <span class="px-2 py-0.5 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-[10px] font-bold flex items-center gap-1">
+            <i class="fa-solid fa-star text-amber-400"></i> 4.9 Karma Rating
+          </span>
+          <span class="px-2 py-0.5 rounded-full bg-brand-500/10 border border-brand-500/30 text-brand-300 text-[10px] font-bold">
+            ⚡️ Top CPCC Peer
+          </span>
+        </div>
+
+        <div class="grid grid-cols-3 gap-2 mt-4 bg-slate-900 p-2.5 rounded-xl border border-slate-800 text-center">
+          <div>
+            <span class="block text-base font-bold text-brand-400">14</span>
+            <span class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Matches</span>
+          </div>
+          <div>
+            <span class="block text-base font-bold text-emerald-400">4</span>
+            <span class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">Groups</span>
+          </div>
+          <div>
+            <span class="block text-base font-bold text-accent-cyan">3.8</span>
+            <span class="text-[10px] text-slate-400 uppercase tracking-wider font-semibold">GPA Target</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- CPCC Enrolled Courses -->
+      <div class="py-4 border-b border-slate-800">
+        <h3 class="font-bold text-xs uppercase tracking-wider text-slate-400 mb-2">CPCC Enrolled Courses</h3>
+        <div class="flex flex-wrap gap-2">
+          <span class="px-2.5 py-1 rounded-lg bg-brand-500/10 border border-brand-500/30 text-brand-300 text-xs font-semibold">
+            CHEM 210 (Org Chem I)
+          </span>
+          <span class="px-2.5 py-1 rounded-lg bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 text-xs font-semibold">
+            MATH 201 (Calc II)
+          </span>
+          <span class="px-2.5 py-1 rounded-lg bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 text-xs font-semibold">
+            CS 101 (Intro Python)
+          </span>
+        </div>
+      </div>
+
+      <!-- Vibe & Preferences -->
+      <div class="py-4">
+        <h3 class="font-bold text-xs uppercase tracking-wider text-slate-400 mb-2">My Study Vibe</h3>
+        <div class="grid grid-cols-2 gap-2 text-xs">
+          <div class="p-2 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-building text-brand-400"></i>
+            <span>Central Campus Library</span>
+          </div>
+          <div class="p-2 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-moon text-brand-400"></i>
+            <span>Evening Study</span>
+          </div>
+          <div class="p-2 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-chalkboard text-brand-400"></i>
+            <span>Whiteboard Solver</span>
+          </div>
+          <div class="p-2 rounded-lg bg-slate-900 border border-slate-800 flex items-center gap-2">
+            <i class="fa-solid fa-mug-hot text-brand-400"></i>
+            <span>Coffee Shop Reviews</span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <nav class="bg-slate-900/90 backdrop-blur-md border-t border-slate-800 px-2 py-2 flex items-center justify-around z-30 shrink-0 text-slate-400">
+      <button onclick="switchTab('discover')" id="nav-discover" class="nav-btn active flex flex-col items-center gap-1 text-brand-400 font-semibold transition">
+        <i class="fa-solid fa-cards-blank text-base"></i>
+        <span class="text-[9px]">Discover</span>
+      </button>
+
+      <button onclick="switchTab('spots')" id="nav-spots" class="nav-btn flex flex-col items-center gap-1 hover:text-slate-200 transition">
+        <i class="fa-solid fa-map-location-dot text-base"></i>
+        <span class="text-[9px]">Spots</span>
+      </button>
+
+      <button onclick="switchTab('matches')" id="nav-matches" class="nav-btn flex flex-col items-center gap-1 hover:text-slate-200 transition relative">
+        <i class="fa-solid fa-comments text-base"></i>
+        <span class="text-[9px]">Matches</span>
+        <span id="unreadMatchDot" class="w-2 h-2 rounded-full bg-accent-rose absolute top-0 right-2"></span>
+      </button>
+
+      <button onclick="switchTab('create')" id="nav-create" class="nav-btn flex flex-col items-center gap-1 hover:text-slate-200 transition">
+        <div class="w-7 h-7 rounded-full bg-gradient-to-tr from-brand-600 to-indigo-500 text-white flex items-center justify-center text-xs shadow-md -mt-1">
+          <i class="fa-solid fa-plus"></i>
+        </div>
+        <span class="text-[9px]">Post</span>
+      </button>
+
+      <button onclick="switchTab('profile')" id="nav-profile" class="nav-btn flex flex-col items-center gap-1 hover:text-slate-200 transition">
+        <i class="fa-solid fa-user-gear text-base"></i>
+        <span class="text-[9px]">Profile</span>
+      </button>
+    </nav>
+
+    <!-- MATCH CELEBRATION MODAL -->
+    <div id="matchModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/90 backdrop-blur-md hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm w-full p-6 text-center shadow-2xl relative overflow-hidden">
+        <div class="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs font-bold uppercase tracking-wider mb-4">
+          <i class="fa-solid fa-bolt animate-pulse"></i> CPCC Academic Match!
+        </div>
+
+        <h3 class="font-display font-extrabold text-2xl text-white mb-1">It's a Study Match!</h3>
+        <p class="text-xs text-slate-400 mb-5">You and <span id="matchModalName" class="text-brand-300 font-bold">Maya</span> are connected for <span id="matchModalCourse" class="text-white font-semibold">CHEM 210</span>.</p>
+
+        <div class="flex items-center justify-center -space-x-4 mb-5">
+          <img src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=300&q=80" class="w-20 h-20 rounded-full object-cover border-4 border-slate-900 shadow-xl">
+          <div class="w-10 h-10 rounded-full bg-gradient-to-tr from-brand-600 to-emerald-400 text-white font-black text-sm flex items-center justify-center z-10 border-2 border-slate-900 shadow-lg">
+            ⚡️
+          </div>
+          <img id="matchModalAvatar" src="" class="w-20 h-20 rounded-full object-cover border-4 border-slate-900 shadow-xl">
+        </div>
+
+        <p class="text-[11px] font-semibold text-slate-400 mb-2 text-left">Send Icebreaker Message:</p>
+        <div class="space-y-2 mb-4">
+          <button onclick="sendMatchIcebreaker('Hey! Want to prep for the upcoming midterm together?')" class="w-full text-left p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-brand-500 text-slate-300 hover:text-white text-xs transition">
+            💬 "Hey! Want to prep for the upcoming midterm together?"
+          </button>
+          <button onclick="sendMatchIcebreaker('Are you studying at CPCC Central Campus Library tonight?')" class="w-full text-left p-2.5 rounded-xl bg-slate-950 border border-slate-800 hover:border-brand-500 text-slate-300 hover:text-white text-xs transition">
+            📚 "Are you studying at CPCC Central Campus Library tonight?"
+          </button>
+        </div>
+
+        <button onclick="closeMatchModal()" class="text-xs text-slate-400 hover:text-white font-medium underline">
+          Keep Swiping
+        </button>
+      </div>
+    </div>
+
+    <!-- EMERGENCY CRAM SOS MODAL -->
+    <div id="sosModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden">
+      <div class="bg-slate-900 border border-rose-500/40 rounded-2xl max-w-sm w-full p-5 text-left text-xs space-y-3">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <h3 class="font-bold text-sm text-white flex items-center gap-1.5 text-rose-400">
+            <i class="fa-solid fa-triangle-exclamation animate-pulse"></i>
+            <span>Broadcast Emergency Cram SOS</span>
+          </h3>
+          <button onclick="closeSosModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <p class="text-slate-300 text-[11px]">Facing an urgent exam or project deadline? Blast a priority alert to all classmates enrolled in your CPCC course.</p>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Target Course</label>
+          <select id="sosCourseSelect" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200">
+            <option value="CHEM 210">CHEM 210 - Organic Chemistry I</option>
+            <option value="CS 101">CS 101 - Intro Python Programming</option>
+            <option value="MATH 201">MATH 201 - Calculus II</option>
+            <option value="PHYS 150">PHYS 150 - University Physics I</option>
+            <option value="BIO 168">BIO 168 - Anatomy & Physiology I</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Emergency Message</label>
+          <input type="text" id="sosMessageInput" placeholder="e.g. Midterm in 12 hours! Meeting at Parr Center now!" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200">
+        </div>
+
+        <button onclick="triggerCramSosBroadcast()" class="w-full py-2.5 bg-gradient-to-r from-rose-600 to-red-600 hover:from-rose-500 hover:to-red-500 font-bold text-white rounded-xl shadow-lg transition">
+          🚨 Broadcast SOS Alert Now
+        </button>
+      </div>
+    </div>
+
+    <!-- SESSION PLANNER MODAL -->
+    <div id="sessionModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 text-left text-xs space-y-3">
+        <div class="flex justify-between items-center border-b border-slate-800 pb-2">
+          <h3 class="font-bold text-sm text-white flex items-center gap-1.5">
+            <i class="fa-solid fa-calendar-check text-brand-400"></i>
+            <span>Schedule Study Session</span>
+          </h3>
+          <button onclick="closeSessionModal()" class="text-slate-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Session Location</label>
+          <select id="sessionLoc" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200">
+            <option value="CPCC Central Campus Library 2nd Floor">CPCC Central Campus Library 2nd Floor</option>
+            <option value="CPCC Parr Center Student Lounge">CPCC Parr Center Student Lounge</option>
+            <option value="CPCC Levine Campus Tech Lab">CPCC Levine Campus Tech Lab</option>
+            <option value="CPCC Cato Campus Math Lab">CPCC Cato Campus Math Lab</option>
+            <option value="CPCC Harper Campus Lounge">CPCC Harper Campus Lounge</option>
+            <option value="Virtual Zoom Room">Virtual Zoom Room</option>
+          </select>
+        </div>
+
+        <div class="grid grid-cols-2 gap-2">
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Date</label>
+            <input type="date" value="2026-10-07" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200">
+          </div>
+          <div>
+            <label class="block font-semibold text-slate-300 mb-1">Time</label>
+            <input type="time" value="17:00" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200">
+          </div>
+        </div>
+
+        <div>
+          <label class="block font-semibold text-slate-300 mb-1">Topics to Cover</label>
+          <input type="text" placeholder="e.g. Exam practice problems & worksheet" class="w-full bg-slate-950 border border-slate-800 rounded-xl px-3 py-2 text-slate-200">
+        </div>
+
+        <button onclick="confirmStudySession()" class="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 font-bold text-white rounded-xl transition">
+          Confirm & Send Invite
+        </button>
+      </div>
+    </div>
+
+    <!-- .EDU VERIFICATION MODAL -->
+    <div id="eduModal" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm hidden">
+      <div class="bg-slate-900 border border-slate-800 rounded-2xl max-w-sm w-full p-5 text-center text-xs space-y-3">
+        <div class="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 flex items-center justify-center text-xl mx-auto">
+          <i class="fa-solid fa-graduation-cap"></i>
+        </div>
+        <h3 class="font-bold text-base text-white">Central Piedmont CC Verification</h3>
+        <p class="text-slate-300">All users on StudySwipe are verified using their official <span class="text-emerald-400 font-semibold">@cpcc.edu</span> email address to ensure a trusted, campus-only learning environment.</p>
+        <div class="p-3 bg-slate-950 rounded-xl border border-slate-800 text-left">
+          <p class="text-[11px] text-slate-400 font-semibold uppercase">Your Verified Account:</p>
+          <p class="font-mono text-emerald-300 font-bold mt-0.5">a.river@cpcc.edu</p>
+        </div>
+        <button onclick="closeEduModal()" class="w-full py-2 bg-brand-600 hover:bg-brand-500 text-white font-bold rounded-xl transition">
+          Got It!
+        </button>
+      </div>
+    </div>
+
+    <!-- TOAST NOTIFICATION CONTAINER -->
+    <div id="toastContainer" class="absolute top-16 left-1/2 -translate-x-1/2 z-50 pointer-events-none space-y-2 w-11/12 max-w-xs"></div>
+
+  </div>
+
+  <script>
+    // CPCC Study Spots Dataset
+    const CPCC_STUDY_SPOTS = [
+      {
+        id: 'spot_1',
+        name: 'Parr Center 2nd Floor Lounge',
+        campus: 'Central Campus',
+        noise: 'Medium / Social',
+        noiseColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+        outlets: 'Abundant (Every Table)',
+        wifi: 'Super Fast (CPCC-Guest / Secure)',
+        image: 'https://images.unsplash.com/photo-1521587760476-6c12a4b040da?auto=format&fit=crop&w=400&q=80',
+        description: 'Spacious student commons with whiteboards, lounge chairs, and direct access to coffee.'
+      },
+      {
+        id: 'spot_2',
+        name: 'Central Campus Library Silent Study',
+        campus: 'Central Campus',
+        noise: 'Silent / Focused',
+        noiseColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+        outlets: 'High',
+        wifi: 'High Speed',
+        image: 'https://images.unsplash.com/photo-1568667256549-094345857637?auto=format&fit=crop&w=400&q=80',
+        description: 'Dedicated quiet floors perfect for intense exam prep and distraction-free study sessions.'
+      },
+      {
+        id: 'spot_3',
+        name: 'Levine Campus Computer Lab',
+        campus: 'Levine Campus',
+        noise: 'Collaborative',
+        noiseColor: 'text-cyan-400 bg-cyan-500/10 border-cyan-500/30',
+        outlets: 'At All Stations',
+        wifi: 'High Speed Ethernet + WiFi',
+        image: 'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&w=400&q=80',
+        description: 'Equipped with dual-monitor desktops, programming IDEs, and group discussion booths.'
+      },
+      {
+        id: 'spot_4',
+        name: 'Cato Campus Learning Resource Center',
+        campus: 'Cato Campus',
+        noise: 'Low / Moderate',
+        noiseColor: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/30',
+        outlets: 'High',
+        wifi: 'High Speed',
+        image: 'https://images.unsplash.com/photo-1497633762265-9d179a990aa6?auto=format&fit=crop&w=400&q=80',
+        description: 'Quiet room reservations available with digital screens for group presentations.'
+      },
+      {
+        id: 'spot_5',
+        name: 'Harper Campus Courtyard Tables',
+        campus: 'Harper Campus',
+        noise: 'Outdoor / Chill',
+        noiseColor: 'text-amber-400 bg-amber-500/10 border-amber-500/30',
+        outlets: 'Limited (Near Entrances)',
+        wifi: 'Good Outdoor Coverage',
+        image: 'https://images.unsplash.com/photo-1541339907198-e08756dedf3f?auto=format&fit=crop&w=400&q=80',
+        description: 'Fresh air outdoor shaded picnic tables perfect for casual group quizzes.'
+      }
+    ];
+
+    // Initial Student Dataset
+    const INITIAL_CARDS = [
+      {
+        id: 'card_1',
+        name: 'Maya Lin',
+        major: 'Bio-Chemistry @ CPCC',
+        year: 'Sophomore',
+        campus: 'Central Campus',
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+        course: 'CHEM 210',
+        mode: 'buddy',
+        modeLabel: 'Study Buddy',
+        rating: '4.9 ★ (12)',
+        needTitle: 'Reaction Mechanisms & Synthesis',
+        description: 'Struggling with Chapter 4 SN1/SN2 synthesis mechanisms. Looking for a regular whiteboard problem-solving partner at Parr Center!',
+        tags: ['Whiteboard Focus', 'Parr Center', 'Midterm Prep'],
+        availability: 'Mon / Wed / Fri • 5:00 - 8:00 PM',
+        rate: 'Free / Peer Swap'
+      },
+      {
+        id: 'card_2',
+        name: 'Alex Chen',
+        major: 'Computer Science @ CPCC',
+        year: 'Sophomore',
+        campus: 'Levine Campus',
+        avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80',
+        course: 'CS 101',
+        mode: 'tutor',
+        modeLabel: 'Peer Tutor (A Grade)',
+        rating: '5.0 ★ (19)',
+        needTitle: '1-on-1 Python Recursion & OOP',
+        description: 'Scored an A in CS101. Offering structured 1-on-1 sessions for loops, recursion, and debugging homework assignments.',
+        tags: ['Code Review', 'Levine Tech Lab', 'Patient Tutor'],
+        availability: 'Tue / Thu • 2:00 - 6:00 PM',
+        rate: '$15 / hr'
+      },
+      {
+        id: 'card_3',
+        name: 'PHYS 150 Cram Squad',
+        major: 'CPCC Engineering Host',
+        year: 'Freshman Host',
+        campus: 'Central Campus',
+        avatar: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=400&q=80',
+        course: 'PHYS 150',
+        mode: 'group',
+        modeLabel: 'Group Session (3/5 Full)',
+        rating: '4.8 ★ (8)',
+        needTitle: 'Kinematics & Work-Energy Circle',
+        description: 'Weekly practice problem session! We tackle past exams together and quiz each other on formulas at Central Campus.',
+        tags: ['Group Practice', 'Past Exam Papers', 'Snacks Provided'],
+        availability: 'Thursdays • 7:00 PM @ Parr Center 204',
+        rate: 'Free Group Session'
+      },
+      {
+        id: 'card_4',
+        name: 'Sofia Rodriguez',
+        major: 'Applied Mathematics @ CPCC',
+        year: 'Sophomore',
+        campus: 'Cato Campus',
+        avatar: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?auto=format&fit=crop&w=400&q=80',
+        course: 'MATH 201',
+        mode: 'buddy',
+        modeLabel: 'Study Buddy',
+        rating: '4.9 ★ (15)',
+        needTitle: 'Integration by Parts & Infinite Series',
+        description: 'Calc II is brutal this term! Looking for someone at Cato Campus to sit down and grind through weekly problem sets.',
+        tags: ['Night Owl', 'Cato Math Lab', 'High Energy'],
+        availability: 'Mon - Thu • 8:00 PM - Midnight',
+        rate: 'Free / Peer Credit'
+      },
+      {
+        id: 'card_5',
+        name: 'David Kim',
+        major: 'Economics @ CPCC',
+        year: 'Sophomore',
+        campus: 'Harris Campus',
+        avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?auto=format&fit=crop&w=400&q=80',
+        course: 'ECON 102',
+        mode: 'tutor',
+        modeLabel: 'Peer Tutor (A Grade)',
+        rating: '4.9 ★ (22)',
+        needTitle: 'Elasticity & Market Structure Graphs',
+        description: 'Experienced tutor with pre-made formula sheets and visual graph walkthroughs for exam prep.',
+        tags: ['Formula Sheets', 'Graph Master', 'Flexible Times'],
+        availability: 'Mon / Wed • 1:00 - 5:00 PM',
+        rate: '$18 / hr'
+      },
+      {
+        id: 'card_6',
+        name: 'CPCC Bio Study Circle',
+        major: 'Pre-Med Host',
+        year: 'Sophomore Host',
+        campus: 'Harper Campus',
+        avatar: 'https://images.unsplash.com/photo-1523240795612-9a054b0db644?auto=format&fit=crop&w=400&q=80',
+        course: 'CHEM 210',
+        mode: 'group',
+        modeLabel: 'Group Session (4/6 Full)',
+        rating: '5.0 ★ (11)',
+        needTitle: 'Friday Lab & Mock Quiz Circle',
+        description: 'Organizing an intensive Friday mock lab & flashcard review group before Midterm 2 at Harper Campus. 2 spots left!',
+        tags: ['Flashcard Quiz', 'Harper Lounge', 'Mock Tests'],
+        availability: 'Fridays • 3:00 - 6:00 PM',
+        rate: 'Free Group Session'
+      },
+      {
+        id: 'card_7',
+        name: 'Jordan Washington',
+        major: 'Nursing / Health Sciences @ CPCC',
+        year: 'Sophomore',
+        campus: 'Merancas Campus',
+        avatar: 'https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&w=400&q=80',
+        course: 'BIO 168',
+        mode: 'buddy',
+        modeLabel: 'Study Buddy',
+        rating: '4.8 ★ (7)',
+        needTitle: 'Anatomy & Physiology Lab Diagrams',
+        description: 'Memorizing muscle origins, insertions, and neural pathways for Bio 168. Looking for a flashcard & diagram labeling buddy!',
+        tags: ['Anatomy Lab', 'Merancas Campus', 'Flashcards'],
+        availability: 'Mon / Wed • 3:00 - 6:00 PM',
+        rate: 'Free / Peer Swap'
+      },
+      {
+        id: 'card_8',
+        name: 'Marcus Vance',
+        major: 'Business Administration @ CPCC',
+        year: 'Sophomore',
+        campus: 'Central Campus',
+        avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=400&q=80',
+        course: 'ACC 120',
+        mode: 'tutor',
+        modeLabel: 'Peer Tutor (A Grade)',
+        rating: '5.0 ★ (14)',
+        needTitle: 'Financial Accounting & Ledger Balance',
+        description: 'Tutor with 2+ years accounting experience. I break down debits, credits, and financial statements step-by-step.',
+        tags: ['Excel Spreadsheets', 'Central Library', 'Exam Prep'],
+        availability: 'Tue / Thu / Sat • 10:00 AM - 2:00 PM',
+        rate: '$16 / hr'
+      }
+    ];
+
+    let deckCards = [...INITIAL_CARDS];
+    let filteredDeck = [...deckCards];
+    let matches = [
+      {
+        id: 'card_1',
+        name: 'Maya Lin',
+        campus: 'Central Campus',
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+        course: 'CHEM 210',
+        mode: 'buddy',
+        modeLabel: 'Study Buddy',
+        lastMessage: 'Hey! Are we still meeting at 5 PM at Central Campus Library?',
+        time: '10:42 AM',
+        unread: true,
+        messages: [
+          { sender: 'them', text: 'Hey Alex! Matched on CHEM 210 at CPCC!', time: '10:30 AM' },
+          { sender: 'me', text: 'Awesome! I really need help with Chapter 4 synthesis.', time: '10:35 AM' },
+          { sender: 'them', text: 'Hey! Are we still meeting at 5 PM at Central Campus Library?', time: '10:42 AM' }
+        ]
+      },
+      {
+        id: 'card_2',
+        name: 'Alex Chen',
+        campus: 'Levine Campus',
+        avatar: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?auto=format&fit=crop&w=400&q=80',
+        course: 'CS 101',
+        mode: 'tutor',
+        modeLabel: 'Peer Tutor',
+        lastMessage: 'I have an opening tomorrow at 2 PM if you want Python review!',
+        time: 'Yesterday',
+        unread: false,
+        messages: [
+          { sender: 'them', text: 'I have an opening tomorrow at 2 PM if you want Python review!', time: 'Yesterday' }
+        ]
+      }
+    ];
+
+    let currentFilters = { mode: 'all', course: 'all', campus: 'all' };
+    let activeMatchId = null;
+    let swipeHistory = [];
+    let isFullCanvas = false;
+
+    function renderDeck() {
+      const container = document.getElementById('deckContainer');
+      if (!container) return;
+      container.innerHTML = '';
+
+      filteredDeck = deckCards.filter(card => {
+        const matchMode = currentFilters.mode === 'all' || card.mode === currentFilters.mode;
+        const matchCourse = currentFilters.course === 'all' || card.course === currentFilters.course;
+        const matchCampus = currentFilters.campus === 'all' || card.campus === currentFilters.campus;
+        return matchMode && matchCourse && matchCampus;
+      });
+
+      if (filteredDeck.length === 0) {
+        container.innerHTML = `
+          <div class="text-center p-6 bg-slate-900 border border-slate-800 rounded-3xl max-w-xs space-y-3">
+            <div class="w-16 h-16 rounded-full bg-slate-800 text-brand-400 flex items-center justify-center text-2xl mx-auto">
+              <i class="fa-solid fa-graduation-cap"></i>
+            </div>
+            <h3 class="font-bold text-white text-base">End of CPCC Card Deck!</h3>
+            <p class="text-xs text-slate-400">No cards match your campus or course filters. Try broadening your filter selection.</p>
+            <button onclick="resetDeck()" class="px-4 py-2 bg-brand-600 hover:bg-brand-500 text-white rounded-xl text-xs font-bold transition">
+              <i class="fa-solid fa-rotate-right mr-1"></i> Reset Deck & Filters
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      const maxStack = Math.min(filteredDeck.length, 3);
+      for (let i = maxStack - 1; i >= 0; i--) {
+        const card = filteredDeck[i];
+        const isTop = (i === 0);
+        
+        const cardElem = document.createElement('div');
+        cardElem.className = `swipe-card absolute inset-0 w-full h-full bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden shadow-card-3d flex flex-col ${isTop ? 'z-10' : 'z-0 pointer-events-none'}`;
+        
+        const scale = 1 - (i * 0.04);
+        const translateY = i * 12;
+        cardElem.style.transform = `scale(${scale}) translateY(${translateY}px)`;
+        if (!isTop) cardElem.style.opacity = 0.85 - (i * 0.2);
+
+        let modeColor = 'bg-brand-600/20 text-brand-300 border-brand-500/30';
+        let modeIcon = 'fa-user-group';
+        if (card.mode === 'tutor') {
+          modeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+          modeIcon = 'fa-graduation-cap';
+        } else if (card.mode === 'group') {
+          modeColor = 'bg-accent-cyan/20 text-accent-cyan border-accent-cyan/30';
+          modeIcon = 'fa-users';
+        }
+
+        cardElem.innerHTML = `
+          <div class="swipe-badge badge-match absolute top-6 right-6 z-20 px-4 py-1.5 rounded-2xl border-2 border-emerald-400 bg-emerald-500/20 text-emerald-300 font-extrabold text-xl uppercase tracking-wider transform rotate-12 shadow-lg">
+            CONNECT 💚
+          </div>
+          <div class="swipe-badge badge-pass absolute top-6 left-6 z-20 px-4 py-1.5 rounded-2xl border-2 border-rose-500 bg-rose-500/20 text-rose-300 font-extrabold text-xl uppercase tracking-wider transform -rotate-12 shadow-lg">
+            PASS ❌
+          </div>
+          <div class="swipe-badge badge-super absolute bottom-20 left-1/2 -translate-x-1/2 z-20 px-4 py-1.5 rounded-2xl border-2 border-cyan-400 bg-cyan-500/20 text-cyan-300 font-extrabold text-lg uppercase tracking-wider shadow-lg">
+            SUPER STUDY ⭐️
+          </div>
+
+          <div class="relative h-44 w-full bg-slate-950 overflow-hidden shrink-0">
+            <img src="${card.avatar}" class="w-full h-full object-cover">
+            <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-slate-900/40 to-transparent"></div>
+            
+            <div class="absolute top-3 left-3 right-3 flex justify-between items-center gap-2">
+              <span class="px-2.5 py-1 rounded-full text-[11px] font-bold ${modeColor} border backdrop-blur-md flex items-center gap-1.5 shrink-0">
+                <i class="fa-solid ${modeIcon}"></i>
+                <span>${card.modeLabel}</span>
+              </span>
+              <span class="px-2.5 py-1 rounded-full text-[11px] font-extrabold bg-slate-950/80 text-emerald-400 border border-emerald-500/40 backdrop-blur-md flex items-center gap-1 shrink-0">
+                <i class="fa-solid fa-location-dot text-[10px]"></i>
+                <span>${card.campus}</span>
+              </span>
+            </div>
+
+            <div class="absolute bottom-2 left-4 right-4 flex justify-between items-end">
+              <div>
+                <h3 class="font-display font-extrabold text-xl text-white flex items-center gap-1.5">
+                  <span>${card.name}</span>
+                  <i class="fa-solid fa-circle-check text-emerald-400 text-xs" title="Verified CPCC Student"></i>
+                </h3>
+                <p class="text-xs text-slate-300 font-medium">${card.major} • ${card.year}</p>
+              </div>
+              <div class="text-right">
+                <span class="px-2 py-0.5 bg-amber-500/20 border border-amber-500/40 text-amber-300 font-bold rounded-lg text-[10px] block mb-1">
+                  ${card.rating || '5.0 ★'}
+                </span>
+                <span class="px-2 py-0.5 bg-brand-600/90 text-white font-extrabold rounded-lg text-xs shadow-md block">
+                  ${card.course}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex-1 p-4 flex flex-col justify-between overflow-y-auto space-y-3 text-xs">
+            <div class="p-2.5 rounded-2xl bg-slate-950 border border-slate-800">
+              <div class="flex items-center justify-between mb-0.5">
+                <span class="text-[10px] font-bold uppercase tracking-wider text-brand-400">Academic Focus</span>
+                <span class="text-[10px] font-semibold text-slate-400 flex items-center gap-1">
+                  <i class="fa-solid fa-building-columns text-emerald-400"></i>
+                  ${card.campus}
+                </span>
+              </div>
+              <p class="font-bold text-slate-100 text-sm">${card.needTitle}</p>
+            </div>
+
+            <p class="text-slate-300 leading-relaxed">${card.description}</p>
+
+            <div class="grid grid-cols-2 gap-2 text-[11px]">
+              <div class="p-2 rounded-xl bg-slate-950 border border-slate-800/80 flex items-center gap-2">
+                <i class="fa-solid fa-clock text-brand-400"></i>
+                <span class="text-slate-300 font-medium truncate">${card.availability}</span>
+              </div>
+              <div class="p-2 rounded-xl bg-slate-950 border border-slate-800/80 flex items-center gap-2">
+                <i class="fa-solid fa-tag text-emerald-400"></i>
+                <span class="text-slate-300 font-medium truncate">${card.rate}</span>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap gap-1.5 pt-1">
+              ${card.tags.map(t => `<span class="px-2 py-0.5 rounded-lg bg-slate-800 text-slate-300 text-[10px] border border-slate-700 font-medium">#${t}</span>`).join('')}
+            </div>
+          </div>
+        `;
+
+        container.appendChild(cardElem);
+
+        if (isTop) {
+          attachSwipeEvents(cardElem, card);
+        }
+      }
+    }
+
+    function attachSwipeEvents(element, card) {
+      let isDragging = false;
+      let startX = 0, startY = 0;
+      let currentX = 0, currentY = 0;
+
+      const badgeMatch = element.querySelector('.badge-match');
+      const badgePass = element.querySelector('.badge-pass');
+      const badgeSuper = element.querySelector('.badge-super');
+
+      const onStart = (e) => {
+        isDragging = true;
+        element.classList.add('dragging');
+        const point = e.touches ? e.touches[0] : e;
+        startX = point.clientX;
+        startY = point.clientY;
+      };
+
+      const onMove = (e) => {
+        if (!isDragging) return;
+        const point = e.touches ? e.touches[0] : e;
+        currentX = point.clientX - startX;
+        currentY = point.clientY - startY;
+
+        const rotate = currentX * 0.08;
+        element.style.transform = `translate(${currentX}px, ${currentY}px) rotate(${rotate}deg)`;
+
+        if (currentX > 30) {
+          badgeMatch.style.opacity = Math.min(currentX / 120, 1);
+          badgePass.style.opacity = 0;
+          badgeSuper.style.opacity = 0;
+        } else if (currentX < -30) {
+          badgePass.style.opacity = Math.min(-currentX / 120, 1);
+          badgeMatch.style.opacity = 0;
+          badgeSuper.style.opacity = 0;
+        } else if (currentY < -40) {
+          badgeSuper.style.opacity = Math.min(-currentY / 120, 1);
+          badgeMatch.style.opacity = 0;
+          badgePass.style.opacity = 0;
+        } else {
+          badgeMatch.style.opacity = 0;
+          badgePass.style.opacity = 0;
+          badgeSuper.style.opacity = 0;
+        }
+      };
+
+      const onEnd = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        element.classList.remove('dragging');
+
+        const threshold = 100;
+        if (currentX > threshold) {
+          executeCardAction('right', card, element);
+        } else if (currentX < -threshold) {
+          executeCardAction('left', card, element);
+        } else if (currentY < -100) {
+          executeCardAction('up', card, element);
+        } else {
+          element.style.transform = 'scale(1) translateY(0px)';
+          badgeMatch.style.opacity = 0;
+          badgePass.style.opacity = 0;
+          badgeSuper.style.opacity = 0;
+        }
+        currentX = 0;
+        currentY = 0;
+      };
+
+      element.addEventListener('mousedown', onStart);
+      window.addEventListener('mousemove', onMove);
+      window.addEventListener('mouseup', onEnd);
+
+      element.addEventListener('touchstart', onStart, { passive: true });
+      window.addEventListener('touchmove', onMove, { passive: true });
+      window.addEventListener('touchend', onEnd);
+    }
+
+    function triggerSwipe(direction) {
+      if (filteredDeck.length === 0) return;
+      const topCard = filteredDeck[0];
+      const topElem = document.querySelector('.swipe-card.z-10');
+      if (topElem) {
+        executeCardAction(direction, topCard, topElem);
+      }
+    }
+
+    function executeCardAction(direction, card, element) {
+      swipeHistory.push({ card, direction });
+
+      let transformOut = '';
+      if (direction === 'right') transformOut = 'translate(120%, 30px) rotate(25deg)';
+      else if (direction === 'left') transformOut = 'translate(-120%, 30px) rotate(-25deg)';
+      else if (direction === 'up') transformOut = 'translate(0, -120%) rotate(0deg)';
+
+      element.style.transition = 'transform 0.35s ease-out, opacity 0.3s ease';
+      element.style.transform = transformOut;
+      element.style.opacity = '0';
+
+      setTimeout(() => {
+        deckCards = deckCards.filter(c => c.id !== card.id);
+
+        if (direction === 'right' || direction === 'up') {
+          handleMatchCreated(card, direction === 'up');
+        } else {
+          renderDeck();
+        }
+      }, 300);
+    }
+
+    function rewindCard() {
+      if (swipeHistory.length === 0) {
+        showToast('No swipes to undo!', 'info');
+        return;
+      }
+      const last = swipeHistory.pop();
+      deckCards.unshift(last.card);
+      renderDeck();
+      showToast(`Restored card: ${last.card.name}`, 'success');
+    }
+
+    function renderStudySpots(filterCampus = 'all') {
+      const container = document.getElementById('studySpotsContainer');
+      if (!container) return;
+
+      const filtered = CPCC_STUDY_SPOTS.filter(s => filterCampus === 'all' || s.campus === filterCampus);
+
+      container.innerHTML = filtered.map(s => `
+        <div class="bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-md flex flex-col text-xs">
+          <div class="relative h-28 w-full bg-slate-950">
+            <img src="${s.image}" class="w-full h-full object-cover">
+            <div class="absolute inset-0 bg-gradient-to-t from-slate-900 via-transparent"></div>
+            <span class="absolute top-2 left-2 px-2 py-0.5 rounded-lg text-[10px] font-bold bg-slate-950/80 text-emerald-400 border border-emerald-500/30">
+              📍 ${s.campus}
+            </span>
+            <span class="absolute top-2 right-2 px-2 py-0.5 rounded-lg text-[10px] font-bold border ${s.noiseColor}">
+              🔊 ${s.noise}
+            </span>
+          </div>
+          <div class="p-3 space-y-2">
+            <h3 class="font-bold text-slate-100 text-sm">${s.name}</h3>
+            <p class="text-slate-300 leading-snug">${s.description}</p>
+            <div class="grid grid-cols-2 gap-2 text-[10px] pt-1">
+              <div class="p-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-400 flex items-center gap-1">
+                <i class="fa-solid fa-plug text-brand-400"></i> ${s.outlets}
+              </div>
+              <div class="p-1.5 rounded-lg bg-slate-950 border border-slate-800 text-slate-400 flex items-center gap-1">
+                <i class="fa-solid fa-wifi text-emerald-400"></i> ${s.wifi}
+              </div>
+            </div>
+            <button onclick="quickScheduleAtSpot('${s.name}')" class="w-full py-1.5 mt-1 bg-slate-800 hover:bg-slate-700 text-brand-300 font-semibold rounded-xl text-center transition">
+              📅 Schedule Session Here
+            </button>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function filterSpotsByCampus(campus) {
+      renderStudySpots(campus);
+    }
+
+    function quickScheduleAtSpot(spotName) {
+      showSessionPlanModal();
+      const select = document.getElementById('sessionLoc');
+      if (select) {
+        select.value = spotName;
+      }
+    }
+
+    function showSosModal() {
+      const modal = document.getElementById('sosModal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeSosModal() {
+      const modal = document.getElementById('sosModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function triggerCramSosBroadcast() {
+      const course = document.getElementById('sosCourseSelect').value;
+      const msg = document.getElementById('sosMessageInput').value.trim() || 'Midterm preparation alert!';
+      
+      closeSosModal();
+      
+      const banner = document.getElementById('sosActiveBanner');
+      if (banner) {
+        document.getElementById('sosBannerCourse').innerText = course;
+        document.getElementById('sosBannerText').innerText = msg;
+        banner.classList.remove('hidden');
+      }
+
+      showToast(`🚨 Cram SOS Broadcasted to ${course} students!`, 'success');
+      
+      if (window.confetti) {
+        confetti({ particleCount: 50, spread: 60, colors: ['#f43f5e', '#f59e0b'] });
+      }
+    }
+
+    function clearSosAlert() {
+      const banner = document.getElementById('sosActiveBanner');
+      if (banner) banner.classList.add('hidden');
+    }
+
+    function handleMatchCreated(card, isSuper = false) {
+      if (!matches.some(m => m.id === card.id)) {
+        const newMatch = {
+          id: card.id,
+          name: card.name,
+          campus: card.campus,
+          avatar: card.avatar,
+          course: card.course,
+          mode: card.mode,
+          modeLabel: card.modeLabel,
+          lastMessage: isSuper ? '⭐ Sent a Super Study Request!' : 'Connected on StudySwipe!',
+          time: 'Just now',
+          unread: true,
+          messages: [
+            { sender: 'them', text: `Hi! Thanks for connecting. Excited to study ${card.course} together at ${card.campus}!`, time: 'Just now' }
+          ]
+        };
+        matches.unshift(newMatch);
+        renderMatchesList();
+        const dot = document.getElementById('unreadMatchDot');
+        if (dot) dot.classList.remove('hidden');
+      }
+
+      if (window.confetti) {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 },
+          colors: ['#4f46e5', '#06b6d4', '#10b981', '#f59e0b']
+        });
+      }
+
+      openMatchModal(card);
+    }
+
+    function setModeFilter(mode) {
+      currentFilters.mode = mode;
+      
+      const modes = ['all', 'buddy', 'tutor', 'group'];
+      modes.forEach(m => {
+        const btn = document.getElementById(`btn-filter-${m}`);
+        if (btn) {
+          if (m === mode) {
+            btn.className = 'filter-mode-btn py-1.5 rounded-lg text-center font-medium transition text-white bg-brand-600 shadow-sm';
+          } else {
+            btn.className = 'filter-mode-btn py-1.5 rounded-lg text-center font-medium transition text-slate-400 hover:text-slate-200';
+          }
+        }
+      });
+
+      renderDeck();
+    }
+
+    function setCampusFilter(campus) {
+      currentFilters.campus = campus;
+      renderDeck();
+    }
+
+    function setCourseFilter(course) {
+      currentFilters.course = course;
+      renderDeck();
+    }
+
+    function resetDeck() {
+      deckCards = [...INITIAL_CARDS];
+      swipeHistory = [];
+      currentFilters = { mode: 'all', course: 'all', campus: 'all' };
+      
+      setModeFilter('all');
+
+      const courseSelect = document.getElementById('courseFilter');
+      if (courseSelect) courseSelect.value = 'all';
+      const campusSelect = document.getElementById('campusFilter');
+      if (campusSelect) campusSelect.value = 'all';
+
+      renderDeck();
+      showToast('Deck & filters reset to full CPCC campus stack!', 'success');
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.app-tab').forEach(tab => tab.classList.add('hidden'));
+      const targetTab = document.getElementById(`tab-${tabId}`);
+      if (targetTab) targetTab.classList.remove('hidden');
+
+      document.querySelectorAll('.nav-btn').forEach(btn => {
+        btn.classList.remove('text-brand-400');
+        btn.classList.add('text-slate-400');
+      });
+      const activeNav = document.getElementById(`nav-${tabId}`);
+      if (activeNav) {
+        activeNav.classList.remove('text-slate-400');
+        activeNav.classList.add('text-brand-400');
+      }
+
+      if (tabId === 'matches') {
+        const dot = document.getElementById('unreadMatchDot');
+        if (dot) dot.classList.add('hidden');
+        renderMatchesList();
+      } else if (tabId === 'spots') {
+        renderStudySpots();
+      }
+    }
+
+    function filterMatches(filter) {
+      ['all', 'buddy', 'tutor', 'group'].forEach(f => {
+        const btn = document.getElementById(`mfilter-${f}`);
+        if (btn) {
+          if (f === filter) {
+            btn.className = "px-2 py-0.5 rounded font-medium text-white bg-slate-800";
+          } else {
+            btn.className = "px-2 py-0.5 rounded font-medium text-slate-400";
+          }
+        }
+      });
+      renderMatchesList(filter);
+    }
+
+    function renderMatchesList(filter = 'all') {
+      const container = document.getElementById('matchesListContainer');
+      const badge = document.getElementById('matchCountBadge');
+      if (badge) badge.innerText = matches.length;
+
+      if (!container) return;
+      const filtered = matches.filter(m => filter === 'all' || m.mode === filter);
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="text-center py-12 text-slate-500 text-xs">
+            <i class="fa-regular fa-comments text-3xl mb-2 block text-slate-600"></i>
+            No active matches in this section yet. Keep swiping on the Discover deck!
+          </div>
+        `;
+        return;
+      }
+
+      container.innerHTML = filtered.map(m => `
+        <div onclick="openChatView('${m.id}')" class="p-3 hover:bg-slate-900 transition rounded-xl cursor-pointer flex items-center gap-3 relative ${m.unread ? 'bg-slate-900/60' : ''}">
+          <div class="relative shrink-0">
+            <img src="${m.avatar}" class="w-12 h-12 rounded-full object-cover border border-slate-700">
+            ${m.unread ? '<span class="w-3 h-3 rounded-full bg-brand-500 border-2 border-slate-900 absolute top-0 right-0 animate-pulse"></span>' : ''}
+          </div>
+          <div class="flex-1 min-w-0">
+            <div class="flex justify-between items-baseline mb-1">
+              <h4 class="font-bold text-sm text-slate-100 truncate">${m.name}</h4>
+              <span class="text-[10px] text-slate-500">${m.time}</span>
+            </div>
+            <div class="flex items-center gap-1.5 flex-wrap">
+              <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-brand-500/10 text-brand-400 border border-brand-500/20">${m.course}</span>
+              <span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">📍 ${m.campus}</span>
+              <p class="text-xs text-slate-400 truncate w-full mt-0.5">${m.lastMessage}</p>
+            </div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    function openChatView(matchId) {
+      const match = matches.find(m => m.id === matchId);
+      if (!match) return;
+
+      match.unread = false;
+      activeMatchId = matchId;
+
+      document.getElementById('chatUserAvatar').src = match.avatar;
+      document.getElementById('chatUserName').innerText = match.name;
+      document.getElementById('chatUserSub').innerText = `${match.course} • ${match.campus}`;
+
+      renderChatMessages(match);
+      document.getElementById('chatViewOverlay').classList.remove('translate-x-full');
+      renderMatchesList();
+    }
+
+    function closeChatView() {
+      const overlay = document.getElementById('chatViewOverlay');
+      if (overlay) overlay.classList.add('translate-x-full');
+      activeMatchId = null;
+    }
+
+    function renderChatMessages(match) {
+      const box = document.getElementById('chatMessagesBox');
+      if (!box) return;
+
+      box.innerHTML = match.messages.map(msg => {
+        const isMe = msg.sender === 'me';
+        return `
+          <div class="flex flex-col ${isMe ? 'items-end' : 'items-start'} space-y-1">
+            <div class="max-w-[80%] p-3 rounded-2xl text-xs ${isMe ? 'bg-brand-600 text-white rounded-br-none shadow-md' : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none'}">
+              ${msg.text}
+            </div>
+            <span class="text-[9px] text-slate-500 px-1">${msg.time}</span>
+          </div>
+        `;
+      }).join('');
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function sendQuickChat(text) {
+      const input = document.getElementById('chatInput');
+      if (input) input.value = text;
+    }
+
+    function handleSendChatMessage(e) {
+      e.preventDefault();
+      const input = document.getElementById('chatInput');
+      const text = input ? input.value.trim() : '';
+      if (!text || !activeMatchId) return;
+
+      sendChatMessageById(activeMatchId, text, 'me');
+      if (input) input.value = '';
+
+      triggerSimulatedAutoReply(activeMatchId);
+    }
+
+    function sendChatMessageById(matchId, text, sender) {
+      const match = matches.find(m => m.id === matchId);
+      if (!match) return;
+
+      const timeNow = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      match.messages.push({ sender, text, time: timeNow });
+      match.lastMessage = text;
+      match.time = timeNow;
+
+      if (activeMatchId === matchId) {
+        renderChatMessages(match);
+      }
+      renderMatchesList();
+    }
+
+    function triggerSimulatedAutoReply(matchId) {
+      const match = matches.find(m => m.id === matchId);
+      if (!match) return;
+
+      const autoReplies = [
+        `Sounds great! CPCC Library or Parr Center works for me.`,
+        `Perfect! Does 6:00 PM work for you?`,
+        `Awesome! Let's conquer this upcoming midterm test together.`,
+        `Great! I've been working through the practice problems for ${match.course}.`
+      ];
+
+      const randomReply = autoReplies[Math.floor(Math.random() * autoReplies.length)];
+
+      setTimeout(() => {
+        sendChatMessageById(matchId, randomReply, 'them');
+      }, 1600);
+    }
+
+    function toggleFormFields() {
+      const postTypeEl = document.querySelector('input[name="postType"]:checked');
+      if (!postTypeEl) return;
+      const postType = postTypeEl.value;
+      const fieldContainer = document.getElementById('dynamicPostField');
+      if (!fieldContainer) return;
+
+      if (postType === 'tutor') {
+        fieldContainer.innerHTML = `
+          <label class="block font-semibold text-slate-300 mb-1">Tutoring Rate ($/hr)</label>
+          <input type="text" id="postExtra" value="$15 / hr" required class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200">
+        `;
+      } else if (postType === 'group') {
+        fieldContainer.innerHTML = `
+          <label class="block font-semibold text-slate-300 mb-1">Max Group Capacity</label>
+          <select id="postExtra" class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200">
+            <option value="4 Seats Max">4 Seats Max</option>
+            <option value="6 Seats Max" selected>6 Seats Max</option>
+            <option value="8 Seats Max">8 Seats Max</option>
+          </select>
+        `;
+      } else {
+        fieldContainer.innerHTML = `
+          <label class="block font-semibold text-slate-300 mb-1">Study Arrangement</label>
+          <input type="text" id="postExtra" value="Free / Peer Swap" required class="w-full bg-slate-900 border border-slate-800 rounded-xl px-3 py-2.5 text-slate-200">
+        `;
+      }
+    }
+
+    function handleCreatePost(e) {
+      e.preventDefault();
+      const postType = document.querySelector('input[name="postType"]:checked').value;
+      const campus = document.getElementById('postCampus').value;
+      const course = document.getElementById('postCourse').value;
+      const title = document.getElementById('postTitle').value.trim();
+      const desc = document.getElementById('postDescription').value.trim();
+      const extra = document.getElementById('postExtra') ? document.getElementById('postExtra').value : 'Free / Peer Swap';
+      const time = document.getElementById('postTime').value.trim();
+      const tagsInput = document.getElementById('postTags').value.trim();
+
+      const tags = tagsInput ? tagsInput.split(',').map(t => t.trim()) : ['CPCC Campus', 'Exam Prep'];
+
+      let modeLabel = 'Study Buddy';
+      if (postType === 'tutor') modeLabel = 'Peer Tutor';
+      if (postType === 'group') modeLabel = 'Group Session (1/6 Full)';
+
+      const newCard = {
+        id: 'user_card_' + Date.now(),
+        name: 'Alex River (You)',
+        major: 'Computer Science @ CPCC',
+        year: 'Sophomore',
+        campus: campus,
+        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=400&q=80',
+        course: course,
+        mode: postType,
+        modeLabel: modeLabel,
+        rating: '5.0 ★ (New)',
+        needTitle: title,
+        description: desc,
+        tags: tags,
+        availability: time,
+        rate: extra
+      };
+
+      deckCards.unshift(newCard);
+      showToast(`Published card for ${campus}!`, 'success');
+      switchTab('discover');
+      renderDeck();
+
+      document.getElementById('postTitle').value = '';
+      document.getElementById('postDescription').value = '';
+    }
+
+    function openMatchModal(card) {
+      const modal = document.getElementById('matchModal');
+      if (!modal) return;
+      document.getElementById('matchModalName').innerText = card.name;
+      document.getElementById('matchModalCourse').innerText = card.course;
+      document.getElementById('matchModalAvatar').src = card.avatar;
+      modal.classList.remove('hidden');
+    }
+
+    function closeMatchModal() {
+      const modal = document.getElementById('matchModal');
+      if (modal) modal.classList.add('hidden');
+      renderDeck();
+    }
+
+    function sendMatchIcebreaker(text) {
+      closeMatchModal();
+      switchTab('matches');
+      if (matches.length > 0) {
+        openChatView(matches[0].id);
+        sendQuickChat(text);
+      }
+    }
+
+    function toggleViewMode() {
+      const container = document.getElementById('appContainer');
+      const icon = document.getElementById('viewModeIcon');
+      const text = document.getElementById('viewModeText');
+      isFullCanvas = !isFullCanvas;
+      if (isFullCanvas) {
+        container.classList.add('full-canvas');
+        if (icon) icon.innerText = '📱';
+        if (text) text.innerText = 'Phone Frame';
+      } else {
+        container.classList.remove('full-canvas');
+        if (icon) icon.innerText = '🖥️️';
+        if (text) text.innerText = 'Expand Canvas';
+      }
+    }
+
+    function showSessionPlanModal() {
+      const modal = document.getElementById('sessionModal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeSessionModal() {
+      const modal = document.getElementById('sessionModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function confirmStudySession() {
+      closeSessionModal();
+      if (activeMatchId) {
+        const loc = document.getElementById('sessionLoc').value;
+        sendChatMessageById(activeMatchId, `📅 Session Invite: Let's meet at ${loc}!`, 'me');
+        showToast('CPCC Study Session Invite Sent!', 'success');
+      }
+    }
+
+    function showEduBadgeModal() {
+      const modal = document.getElementById('eduModal');
+      if (modal) modal.classList.remove('hidden');
+    }
+
+    function closeEduModal() {
+      const modal = document.getElementById('eduModal');
+      if (modal) modal.classList.add('hidden');
+    }
+
+    function showToast(msg, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      if (!container) return;
+      const toast = document.createElement('div');
+      
+      let badgeBg = 'bg-brand-600';
+      if (type === 'success') badgeBg = 'bg-emerald-600';
+
+      toast.className = `p-3 rounded-2xl ${badgeBg} text-white font-semibold text-xs shadow-xl flex items-center justify-between transform transition-all duration-300 translate-y-[-10px] opacity-0 pointer-events-auto`;
+      toast.innerHTML = `
+        <div class="flex items-center gap-2">
+          <i class="fa-solid fa-circle-info"></i>
+          <span>${msg}</span>
+        </div>
+        <button onclick="this.parentElement.remove()" class="text-white/80 hover:text-white ml-2"><i class="fa-solid fa-xmark"></i></button>
+      `;
+
+      container.appendChild(toast);
+
+      setTimeout(() => {
+        toast.classList.remove('translate-y-[-10px]', 'opacity-0');
+      }, 10);
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0');
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    window.setModeFilter = setModeFilter;
+    window.setCampusFilter = setCampusFilter;
+    window.setCourseFilter = setCourseFilter;
+    window.resetDeck = resetDeck;
+    window.rewindCard = rewindCard;
+    window.triggerSwipe = triggerSwipe;
+    window.switchTab = switchTab;
+    window.filterMatches = filterMatches;
+    window.openChatView = openChatView;
+    window.closeChatView = closeChatView;
+    window.sendQuickChat = sendQuickChat;
+    window.handleSendChatMessage = handleSendChatMessage;
+    window.toggleFormFields = toggleFormFields;
+    window.handleCreatePost = handleCreatePost;
+    window.openMatchModal = openMatchModal;
+    window.closeMatchModal = closeMatchModal;
+    window.sendMatchIcebreaker = sendMatchIcebreaker;
+    window.toggleViewMode = toggleViewMode;
+    window.showSessionPlanModal = showSessionPlanModal;
+    window.closeSessionModal = closeSessionModal;
+    window.confirmStudySession = confirmStudySession;
+    window.showEduBadgeModal = showEduBadgeModal;
+    window.closeEduModal = closeEduModal;
+    window.showSosModal = showSosModal;
+    window.closeSosModal = closeSosModal;
+    window.triggerCramSosBroadcast = triggerCramSosBroadcast;
+    window.clearSosAlert = clearSosAlert;
+    window.filterSpotsByCampus = filterSpotsByCampus;
+    window.quickScheduleAtSpot = quickScheduleAtSpot;
+
+    // Boot app deck on load
+    window.onload = function() {
+      renderDeck();
+      renderMatchesList();
+      toggleFormFields();
+    };
+  </script>
+</body>
+</html>
